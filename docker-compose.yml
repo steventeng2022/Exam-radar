@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: examradar
+      POSTGRES_USER: examradar
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U examradar -d examradar"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://examradar:${POSTGRES_PASSWORD}@postgres:5432/examradar
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?Set ADMIN_TOKEN in .env}
+      DEMO_MODE: ${DEMO_MODE:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+    ports:
+      - 127.0.0.1:8000:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+  frontend:
+    build:
+      context: frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - 127.0.0.1:3000:3000
+    depends_on:
+      - api
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: [python, -m, backend.worker]
+    environment:
+      DATABASE_URL: postgresql+psycopg://examradar:${POSTGRES_PASSWORD}@postgres:5432/examradar
+      CRAWLER_STATE_DIR: /app/data/frontier
+      CRAWLER_INFO_URL: ${CRAWLER_INFO_URL:-http://localhost:3000/crawler}
+    volumes:
+      - frontier:/app/data/frontier
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
+volumes:
+  postgres:
+  frontier:
