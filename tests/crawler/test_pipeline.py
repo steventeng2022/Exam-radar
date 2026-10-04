@@ -88,3 +88,11 @@ def test_changed_known_document_checked_when_homepage_unchanged(tmp_path):
 def test_percent_encoded_chinese_url_scored():
     from crawler.pipeline import score_url
     assert score_url('https://school.edu.tw/%E6%AE%B5%E8%80%83','')>=100
+
+
+def test_progress_callback_can_cancel_without_acknowledging(tmp_path):
+    path=str(tmp_path/'cancel.sqlite3')
+    async def stop(_): raise RuntimeError('cancelled')
+    with pytest.raises(RuntimeError,match='cancelled'):
+        asyncio.run(run_school(SCHOOL,state_path=path,fetcher=FakeFetcher(),on_progress=stop))
+    assert sqlite3.connect(path).execute('select hash from frontier').fetchone()[0] is None

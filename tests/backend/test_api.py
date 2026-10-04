@@ -80,3 +80,85 @@ def test_reject_invalid_origin_and_dates(setup):
         data['start_date'] = '2020-10-13'
         with pytest.raises(ValueError,match='academic year'):
             ingest_exam(db,school,source,data)
+
+
+def test_database_pagination_filters_and_literal_search(setup):
+    client,_=setup
+    first=client.get('/api/exams?limit=4&offset=0').json()
+    second=client.get('/api/exams?limit=4&offset=4').json()
+    assert first['total']==second['total']==15
+    assert {e['id'] for e in first['items']}.isdisjoint({e['id'] for e in second['items']})
+    meta=client.get('/api/filters').json()
+    assert meta['statistics']=={'schools':5,'exams':15}
+    assert meta['academic_years']==[115] and '數學A' in meta['subjects']
+    assert client.get('/api/exams',params={'q':'%'}).json()['total']==0
+    assert client.get('/api/exams?grade=1').status_code==422
+
+
+def test_edit_review_preserves_source_audit_and_prevents_stale_approval(setup):
+    client,factory=setup
+    with factory() as db:
+        school=db.get(School,'yucheng')
+        source=Source(school_id=school.id,url=school.website,title='pending',content_hash='correction-test',source_type='demo',demo=True)
+        db.add(source);db.flush()
+        v,_=ingest_exam(db,school,source,{'academic_year':115,'semester':1,'number':1,'grade':11,'confidence':.65,'subjects':[{'name':'數學A','scope':'old scope','evidence':'原始擷取文字','page_number':2}]})
+        db.commit();version_id=v.id;exam_id=v.exam_id
+    headers={'Authorization':'Bearer test-token'}
+    record=next(r for r in client.get('/api/admin/review',headers=headers).json()['items'] if r['id']==version_id)
+    old_revision=record['version']['revision']
+    payload={'expected_revision':old_revision,'start_date':'2026-10-13','end_date':'2026-10-15','subjects':[{'name':'數學A','scope':'1-1～2-3','page_number':2}],'reason':'依原公告第2頁修正'}
+    edited=client.post(f'/api/admin/review/{version_id}/edit',headers=headers,json=payload)
+    assert edited.status_code==200,edited.text
+    assert edited.json()['source']['content_hash']=='correction-test'
+    assert edited.json()['subjects'][0]['evidence']=='原始擷取文字'
+    assert client.post(f'/api/admin/review/{version_id}/approve',headers=headers,json={'expected_revision':old_revision}).status_code==409
+    assert client.post(f'/api/admin/review/{version_id}/approve',headers=headers,json={'expected_revision':edited.json()['revision']}).status_code==200
+    public=client.get(f'/api/exams/{exam_id}').json()
+    assert len(public['versions'])==2 and public['subjects'][0]['scope']=='1-1～2-3'
+    audit_rows=client.get('/api/admin/audit',headers=headers).json()['items']
+    edit=next(row for row in audit_rows if row['action']=='edit')
+    assert edit['before']['subjects'][0]['scope']=='old scope'
+    assert edit['after']['reason']==payload['reason']
+    assert client.get('/api/admin/audit').status_code==401
+
+
+def test_import_pause_cancel_and_retry_lifecycle(setup):
+    client,_=setup
+    headers={'Authorization':'Bearer test-token'}
+    school={'id':'real-test','name':'測試高中','short_name':'測試','city':'臺北市','website':'https://school.edu.tw','domains':['school.edu.tw'],'crawl_enabled':True}
+    assert client.post('/api/admin/schools/import',headers=headers,json={'schools':[school]}).status_code==200
+    one=client.post('/api/admin/crawl/real-test',headers=headers).json()
+    two=client.post('/api/admin/crawl/real-test',headers=headers).json()
+    assert one['id']==two['id']
+    assert client.post(f"/api/admin/crawls/{one['id']}/cancel",headers=headers).status_code==200
+    retry=client.post(f"/api/admin/crawls/{one['id']}/retry",headers=headers)
+    assert retry.status_code==200 and retry.json()['id']!=one['id']
+    assert client.post('/api/admin/schools/real-test/settings',headers=headers,json={'crawl_enabled':False}).status_code==200
+    assert client.post('/api/admin/crawl/real-test',headers=headers).status_code==409
+    assert client.post('/api/admin/schools/yucheng/settings',headers=headers,json={'crawl_enabled':True}).status_code==409
+    jobs=client.get('/api/admin/crawls',headers=headers).json()['items']
+    assert all(j['status']=='cancelled' for j in jobs)
+    assert client.get('/api/admin/summary',headers=headers).json()['worker']['online'] is False
+
+
+def test_validation_rejects_duplicate_subjects_and_out_of_year_end_dates(setup):
+    _,factory=setup
+    with factory() as db:
+        school=db.get(School,'yucheng')
+        source=Source(school_id=school.id,url=school.website,title='bad',content_hash='bad-dates',source_type='demo',demo=True)
+        db.add(source);db.flush()
+        data={'academic_year':115,'semester':1,'number':1,'grade':11,'confidence':.9,'start_date':'2026-10-13','end_date':'2028-10-15','subjects':[{'name':'數學A','scope':'1'}]}
+        with pytest.raises(ValueError,match='academic year'): ingest_exam(db,school,source,data)
+        data['end_date']=None;data['subjects'].append({'name':'數學A','scope':'2'})
+        with pytest.raises(ValueError,match='Duplicate subject'): ingest_exam(db,school,source,data)
+
+
+def test_only_latest_published_subjects_match_search(setup):
+    client,factory=setup
+    with factory() as db:
+        school=db.get(School,'yucheng')
+        source=Source(school_id=school.id,url=school.website,title='new',content_hash='latest-query',source_type='demo',demo=True)
+        db.add(source);db.flush()
+        ingest_exam(db,school,source,{'academic_year':115,'semester':1,'number':1,'grade':11,'confidence':.99,'subjects':[{'name':'數學A','scope':'最新章節'}]});db.commit()
+    assert client.get('/api/exams',params={'q':'育成','grade':11,'subject':'國文'}).json()['total']==0
+    assert client.get('/api/exams',params={'q':'最新章節','grade':11}).json()['total']==1

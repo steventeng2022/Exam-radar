@@ -95,3 +95,9 @@ GitHub Actions 執行相同後端測試與前端建置。測試使用本地 fixt
 ## 校方聯絡與退出索引
 
 校方可透過 robots.txt 阻擋 `ExamRadarBot`；專案管理者亦可停用 registry 的 `crawl_enabled`。聯絡與更正可在 [GitHub Issues](https://github.com/steventeng2022/Exam-radar/issues) 提出，勿附私人學生資料。正式發布時設定 `CRAWLER_INFO_URL` 為公開的 `/crawler` 說明網址。
+
+## v1.1 流程優化
+
+搜尋與比較採 SQL 分頁，控制台加入學校匯入／暫停、工作取消／重試、爬蟲在線狀態、文件原文與審核修正。所有人工修正保留來源及操作紀錄，舊頁面不能覆蓋已被修改的資料。後端更新詳見 [backend/README.md](backend/README.md)。
+
+正式 Cloudflare 網站以 [Exam-radar-website](https://github.com/steventeng2022/Exam-radar-website) 為主；這個 monorepo 的 frontend 同步提供本地／Docker 開發版本。

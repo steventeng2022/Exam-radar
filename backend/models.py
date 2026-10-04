@@ -108,3 +108,31 @@ class CrawlError(Base):
     url: Mapped[str] = mapped_column(Text)
     message: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entity: Mapped[str] = mapped_column(String, index=True)
+    entity_id: Mapped[str] = mapped_column(String)
+    action: Mapped[str] = mapped_column(String)
+    before: Mapped[dict | None] = mapped_column(JSON)
+    after: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+class WorkerState(Base):
+    __tablename__ = "worker_state"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    owner: Mapped[str] = mapped_column(String)
+    heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    lease_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    current_job_id: Mapped[int | None] = mapped_column(Integer)
+
+class CrawlDocument(Base):
+    __tablename__ = "crawl_documents"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_id: Mapped[int] = mapped_column(ForeignKey("sources.id"), unique=True)
+    school_id: Mapped[str] = mapped_column(ForeignKey("schools.id"), index=True)
+    text: Mapped[str] = mapped_column(Text)
+    pages: Mapped[list] = mapped_column(JSON)
+    extraction_status: Mapped[str] = mapped_column(String, default="needs_manual")
+    truncated: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -78,13 +78,13 @@ class State:
             return
         self.db.execute('INSERT OR IGNORE INTO frontier(school,url,priority,status) VALUES(?,?,?,?)',(school,url,priority,'queued')); self.db.commit()
     def known_urls(self,school):
-        return self.db.execute('SELECT url,priority FROM frontier WHERE school=? ORDER BY priority DESC LIMIT 10000',(school,)).fetchall()
+        return self.db.execute("SELECT url,priority + CASE WHEN hash IS NULL THEN 500 ELSE 0 END AS effective FROM frontier WHERE school=? ORDER BY effective DESC LIMIT 10000",(school,)).fetchall()
     def previous(self,school,url):
         return self.db.execute('SELECT hash,etag,modified FROM frontier WHERE school=? AND url=?',(school,url)).fetchone()
     def done(self,school,url,digest,headers):
         self.db.execute('UPDATE frontier SET status=?,hash=?,etag=?,modified=? WHERE school=? AND url=?',('fetched',digest,headers.get('etag'),headers.get('last-modified'),school,url)); self.db.commit()
 
-async def run_school(school,*,max_pages=40,state_path=None,fetcher=None,commit_state=True):
+async def run_school(school,*,max_pages=40,state_path=None,fetcher=None,commit_state=True,on_progress=None):
     """Returns CrawlResult with documents, extractions, errors; never publishes directly."""
     if isinstance(school,dict): school=School(**school)
     max_pages=min(max(int(max_pages),1),100)
@@ -99,6 +99,7 @@ async def run_school(school,*,max_pages=40,state_path=None,fetcher=None,commit_s
         while queue and result.pages_checked<max_pages:
             _,url,title=heapq.heappop(queue)
             if url in seen: continue
+            if on_progress: await on_progress(result.pages_checked)
             seen.add(url); result.pages_checked+=1
             try:
                 previous=state.previous(str(school.id),url) if state else None
