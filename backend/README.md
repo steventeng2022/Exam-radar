@@ -38,3 +38,7 @@ Admin: `POST /api/admin/crawl/{school_id}`, `GET /api/admin/crawls`, `GET /api/a
 新增的 `audit_logs`、`worker_state`、`crawl_documents` 都是新資料表，啟動時建立，不改寫原有資料表欄位。升級前備份資料庫，先停止舊版 crawler 再部署新版；不要讓沒有 lease 的舊 worker 與新版同時運行。
 
 PostgreSQL provider 的 `postgres://` 和 `postgresql://` 會自動改用已安裝的 psycopg driver。Docker API 支援平台提供的 PORT，未指定時使用 8000。
+
+人工整理：`POST /api/admin/sources/:sourceId/extract`，輸入學年度、學期、次數、年級、日期、科目範圍與 reason。學校由既存 source 固定，結果一律進審核，不直接發布；同來源與段考身份重複提交回傳 409。控制台「文件原文」提供對應表單。
+
+Docker 服務支援自動重新啟動，crawler 等 API 健康檢查成功再啟動。非正常停止後，舊 lease 最長 180 秒到期才允許接手；保留 running 工作及 frontier 的恢復能力。GitHub Actions 除 SQLite fixture 外，也使用 PostgreSQL 17 重跑管理與公開 API 流程。

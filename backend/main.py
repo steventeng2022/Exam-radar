@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 from .database import Base, engine, get_db, SessionLocal
 from .models import School, Exam, ExamVersion, ExamSubject, CrawlJob, CrawlDocument, Source, AuditLog, now
 from .query import published_query, page_rows, academic_year_now
-from .services import revision, snapshot, validate_exam, audit
-from .schemas import ReviewEdit, DecisionInput, SchoolBatch, SchoolSettings
+from .services import revision, snapshot, validate_exam, audit, ingest_exam
+from .schemas import ReviewEdit, DecisionInput, SchoolBatch, SchoolSettings, ManualExam
 from .workflows import enqueue_school, job_dict, summary
 
 @asynccontextmanager
@@ -109,8 +109,8 @@ def subjects(db: Session=Depends(get_db)):
     return {'items':filters(db)['subjects']}
 
 @app.get('/api/compare')
-def compare(subject: str='數學A',grade: int=Query(11,ge=7,le=12),academic_year: int|None=None,semester: int=Query(1,ge=1,le=2),number: int=Query(1,ge=1,le=3),city: str|None=None,q: str='',limit: int=Query(24,ge=1,le=200),offset: int=Query(0,ge=0),db: Session=Depends(get_db)):
-    data=exam_page(db,limit,offset,q=q,city=city,subject=subject,grade=grade,academic_year=academic_year if academic_year is not None else academic_year_now(),semester=semester,number=number)
+def compare(subject: str='數學A',grade: int=Query(11,ge=7,le=12),academic_year: int|None=None,semester: int=Query(1,ge=1,le=2),number: int=Query(1,ge=1,le=3),city: str|None=None,school_id: str|None=None,q: str=Query('',max_length=200),limit: int=Query(24,ge=1,le=200),offset: int=Query(0,ge=0),db: Session=Depends(get_db)):
+    data=exam_page(db,limit,offset,q=q,city=city,school_id=school_id,subject=subject,grade=grade,academic_year=academic_year if academic_year is not None else academic_year_now(),semester=semester,number=number)
     return {**data,'subject':subject}
 
 @app.post('/api/admin/crawl/{school_id}',dependencies=[Depends(admin)],status_code=202)
@@ -167,6 +167,7 @@ def school_settings(school_id: str,body: SchoolSettings,db: Session=Depends(get_
     if s.demo and body.crawl_enabled: raise HTTPException(409,'Demo school crawling disabled')
     before={'crawl_enabled':s.crawl_enabled};s.crawl_enabled=body.crawl_enabled
     if not body.crawl_enabled:
+        s.crawler_status='idle'
         for job in db.scalars(select(CrawlJob).where(CrawlJob.school_id==s.id,CrawlJob.status.in_(['queued','running']))):
             job.status='cancelled';job.completed_at=now();job.error='School crawling disabled'
     audit(db,'school',s.id,'settings',before,body.model_dump())
@@ -231,3 +232,20 @@ def source_document(source_id: int,db: Session=Depends(get_db)):
     doc=db.scalar(select(CrawlDocument).where(CrawlDocument.source_id==source_id))
     if not doc: raise HTTPException(404,'Parsed document not available; open the original announcement')
     return {'source':source_dict(db.get(Source,source_id)),'text':doc.text,'pages':doc.pages,'status':doc.extraction_status,'truncated':doc.truncated}
+
+@app.post('/api/admin/sources/{source_id}/extract',dependencies=[Depends(admin)],status_code=201)
+def manual_extract(source_id: int,body: ManualExam,db: Session=Depends(get_db)):
+    source=db.get(Source,source_id)
+    document=db.scalar(select(CrawlDocument).where(CrawlDocument.source_id==source_id))
+    if not source or not document: raise HTTPException(404,'Parsed source not found')
+    # The school comes only from the stored source. Lock the school to serialize identity writes.
+    school=db.scalar(select(School).where(School.id==source.school_id).with_for_update())
+    data=body.model_dump(mode='json',exclude={'reason'})
+    data.update(confidence=.65,review_required=True)
+    try: version,created=ingest_exam(db,school,source,data)
+    except ValueError as exc: raise HTTPException(422,str(exc))
+    if not created: raise HTTPException(409,'This source and exam identity already have a version; use the review queue')
+    document.extraction_status='review'
+    audit(db,'review',version.id,'manual_extract',after={**snapshot(version),'reason':body.reason,'source_id':source_id,'academic_year':body.academic_year,'semester':body.semester,'number':body.number,'grade':body.grade})
+    db.commit()
+    return {'id':version.id,'status':version.status,'exam_id':version.exam_id}

@@ -1,4 +1,5 @@
 import pytest
+import os
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -9,9 +10,10 @@ from backend.models import School, Source, ExamVersion
 from backend.seed import seed_demo
 from backend.services import ingest_exam
 
-@pytest.fixture
-def setup(monkeypatch):
-    engine = create_engine('sqlite://',connect_args={'check_same_thread':False},poolclass=StaticPool)
+@pytest.fixture(params=['sqlite'] + (['postgres'] if os.getenv('TEST_DATABASE_URL') else []))
+def setup(monkeypatch,request):
+    engine = create_engine(os.environ['TEST_DATABASE_URL']) if request.param=='postgres' else create_engine('sqlite://',connect_args={'check_same_thread':False},poolclass=StaticPool)
+    Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine,expire_on_commit=False)
     with factory() as db:
@@ -24,6 +26,8 @@ def setup(monkeypatch):
     client = TestClient(app)
     yield client,factory
     app.dependency_overrides.clear()
+    Base.metadata.drop_all(engine)
+    engine.dispose()
 
 
 def test_search_and_provenance(setup):
@@ -93,6 +97,32 @@ def test_database_pagination_filters_and_literal_search(setup):
     assert meta['academic_years']==[115] and '數學A' in meta['subjects']
     assert client.get('/api/exams',params={'q':'%'}).json()['total']==0
     assert client.get('/api/exams?grade=1').status_code==422
+    assert client.get('/api/compare',params={'school_id':'yucheng','academic_year':115}).json()['total']==1
+
+
+def test_manual_document_enters_review_and_is_idempotent(setup):
+    from backend.models import CrawlDocument
+    client,factory=setup
+    with factory() as db:
+        school=db.get(School,'yucheng')
+        source=Source(school_id=school.id,url=school.website,title='unparsed source',content_hash='manual-document',source_type='demo',demo=True)
+        db.add(source);db.flush()
+        db.add(CrawlDocument(source_id=source.id,school_id=school.id,text='數學A：1-1～2-2',pages=[{'page':1,'text':'數學A：1-1～2-2'}]))
+        db.commit();source_id=source.id
+    body={'academic_year':115,'semester':1,'number':2,'grade':11,'subjects':[{'name':'數學A','scope':'1-1～2-2','page_number':1}],'reason':'依原公告人工整理'}
+    path=f'/api/admin/sources/{source_id}/extract'
+    assert client.post(path,json=body).status_code==401
+    headers={'Authorization':'Bearer test-token'}
+    result=client.post(path,json=body,headers=headers)
+    assert result.status_code==201 and result.json()['status']=='review'
+    assert client.get('/api/exams',params={'number':2}).json()['total']==0
+    assert client.post(path,json=body,headers=headers).status_code==409
+    version=client.get('/api/admin/review',headers=headers).json()['items'][0]['version']
+    assert client.post(f"/api/admin/review/{result.json()['id']}/approve",json={'expected_revision':version['revision']},headers=headers).status_code==200
+    public=client.get('/api/exams',params={'number':2}).json()
+    assert public['total']==1 and public['items'][0]['sources'][0]['id']==source_id
+    logs=client.get('/api/admin/audit',headers=headers).json()['items']
+    assert any(row['action']=='manual_extract' and row['after']['reason']==body['reason'] for row in logs)
 
 
 def test_edit_review_preserves_source_audit_and_prevents_stale_approval(setup):

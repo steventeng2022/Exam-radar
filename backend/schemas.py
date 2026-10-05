@@ -57,3 +57,13 @@ class SchoolBatch(StrictInput):
 
 class SchoolSettings(StrictInput):
     crawl_enabled: bool
+
+class ManualExam(StrictInput):
+    academic_year: int = Field(ge=100, le=999)
+    semester: int = Field(ge=1, le=2)
+    number: int = Field(ge=1, le=3)
+    grade: int = Field(ge=7, le=12)
+    start_date: date | None = None
+    end_date: date | None = None
+    subjects: list[SubjectInput] = Field(min_length=1, max_length=40)
+    reason: str = Field(min_length=1, max_length=1000)

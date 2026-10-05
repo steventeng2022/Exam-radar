@@ -54,7 +54,7 @@ python -m crawler https://your-school.edu.tw --name '學校完整名稱' --id sc
 
 先建立 `data/`。網站必須公開、允許 robots 索引，且來源校名能核對。跨網域附件需由管理者明確加入學校 domains，不能自動信任外部連結。AI provider 預設停用，不需 OpenAI API key，不會把校方文件送往外部模型。
 
-持久化 worker 透過 `python -m backend.worker` 執行管理 API 排入的工作；registry 匯入與排程命令見 [backend/README.md](backend/README.md)。執行 worker 前先啟動 API，讓資料表完成初始化。worker 與 API 必須使用相同 `DATABASE_URL`。同一資料庫只啟動一個 worker，避免重複處理；多 worker 的分散式 lease 留待後續版本。
+持久化 worker 透過 `python -m backend.worker` 執行管理 API 排入的工作；registry 匯入與排程命令見 [backend/README.md](backend/README.md)。執行 worker 前先啟動 API，讓資料表完成初始化。worker 與 API 必須使用相同 `DATABASE_URL`。同一資料庫只啟動一個 worker，避免重複處理；新版以全域 lease 阻止第二個 worker 同時執行；仍只支援一個活躍 worker。
 
 爬取採保守規則抽取：同校名、學年度、學期、次數、單一年級與科目範圍能確認時產生待審核版本。日期不明保留空值。多個年級混合表格、掃描 PDF 等情況可能只保存文件而無抽取結果；不猜測學校或範圍。
 
@@ -88,7 +88,7 @@ GitHub Actions 執行相同後端測試與前端建置。測試使用本地 fixt
 
 ## 範圍與尚未完成事項
 
-這是可運行的工程 MVP，**不是已完成全台資料蒐集的服務**。尚未啟用搜尋引擎補充發現、JS-only browser fallback、OCR、DOC/XLS legacy 轉換或 LLM extraction。全台官方 registry、20 校人工標註評估、95% extraction／90% discovery 的 KPI 尚未驗證。跨校表格保留原範圍文字，不宣稱已做出版社教材對照。歷屆試題推薦、通知、多管理員帳號、審核編輯器與分散式佇列屬後續版本。
+這是可運行的工程 MVP，**不是已完成全台資料蒐集的服務**。尚未啟用搜尋引擎補充發現、JS-only browser fallback、OCR、DOC/XLS legacy 轉換或 LLM extraction。全台官方 registry、20 校人工標註評估、95% extraction／90% discovery 的 KPI 尚未驗證。跨校表格保留原範圍文字，不宣稱已做出版社教材對照。歷屆試題推薦、通知、多管理員帳號、分散式佇列屬後續版本。
 
 [產品範圍](docs/PRODUCT.md) · [架構](docs/ARCHITECTURE.md)
 
@@ -98,6 +98,6 @@ GitHub Actions 執行相同後端測試與前端建置。測試使用本地 fixt
 
 ## v1.1 流程優化
 
-搜尋與比較採 SQL 分頁，控制台加入學校匯入／暫停、工作取消／重試、爬蟲在線狀態、文件原文與審核修正。所有人工修正保留來源及操作紀錄，舊頁面不能覆蓋已被修改的資料。後端更新詳見 [backend/README.md](backend/README.md)。
+搜尋與比較採 SQL 分頁，控制台加入文件人工整理、學校匯入／暫停、工作取消／重試、爬蟲在線狀態、文件原文與審核修正。所有人工修正保留來源及操作紀錄，舊頁面不能覆蓋已被修改的資料。後端更新詳見 [backend/README.md](backend/README.md)。
 
 正式 Cloudflare 網站以 [Exam-radar-website](https://github.com/steventeng2022/Exam-radar-website) 為主；這個 monorepo 的 frontend 同步提供本地／Docker 開發版本。

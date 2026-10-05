@@ -108,7 +108,9 @@ async def run_once(owner=None):
                     live_job.pages_checked=pages_checked
                     progress_db.commit()
             result = await run_school(crawl_school,state_path=state_path,commit_state=False,on_progress=progress,max_pages=int(os.getenv('CRAWLER_MAX_PAGES','40')))
-            db.refresh(job);db.refresh(school);check_lease(db,owner)
+            check_lease(db,owner)
+            school=db.scalar(select(School).where(School.id==school_id).with_for_update().execution_options(populate_existing=True))
+            job=db.scalar(select(CrawlJob).where(CrawlJob.id==job_id).with_for_update().execution_options(populate_existing=True))
             if job.status != 'running' or not school.crawl_enabled:
                 raise JobCancelled('Crawl cancelled or school paused')
             sources, documents = {}, {}
@@ -159,7 +161,12 @@ async def run_once(owner=None):
             db.commit()
         except Exception as exc:
             db.rollback()
+            lease=db.get(WorkerState,'crawler') if owner else None
+            if owner and (not lease or lease.owner!=owner):
+                return True
             job=db.get(CrawlJob,job_id)
+            if job.status=='cancelled':
+                return True
             job.status='failed';job.error=str(exc)[:2000];job.completed_at=now()
             db.get(School,school_id).crawler_status='failed'
             db.commit()
