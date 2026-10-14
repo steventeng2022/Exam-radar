@@ -1,5 +1,7 @@
 # Exam Radar 📡
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 全台校園考試資訊搜尋引擎：搜尋各校公開段考範圍、比較進度、追溯原始公告與修正版。
 
 參考 [STA](https://sta-tw.org/) 與 [STA monorepo](https://github.com/sta-tw/sta-tw.org) 的產品與前後端分工，獨立實作 Next.js + FastAPI + Python crawler。此專案不隸屬 STA 或任何學校。
@@ -101,3 +103,15 @@ GitHub Actions 執行相同後端測試與前端建置。測試使用本地 fixt
 搜尋與比較採 SQL 分頁，控制台加入文件人工整理、學校匯入／暫停、工作取消／重試、爬蟲在線狀態、文件原文與審核修正。所有人工修正保留來源及操作紀錄，舊頁面不能覆蓋已被修改的資料。後端更新詳見 [backend/README.md](backend/README.md)。
 
 正式 Cloudflare 網站以 [Exam-radar-website](https://github.com/steventeng2022/Exam-radar-website) 為主；這個 monorepo 的 frontend 同步提供本地／Docker 開發版本。
+
+## 參與貢獻
+
+歡迎回報問題、提出功能建議與提交 Pull Request。開發流程、驗證方式及資料提交原則見 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+## 授權
+
+本專案原創程式碼與隨附文件採用 [MIT License](LICENSE)，版權所有 © 2026 steventeng2022。使用、修改與散布時請保留版權及授權聲明。
+
+第三方依賴保留各自的授權條款。特別是 requirements.txt 中的 [PyMuPDF](https://pymupdf.io/licensing) 採 AGPL-3.0 或商業授權；本專案的 MIT 授權不會取代 PyMuPDF 的條款。使用、部署或散布包含該依賴的整體應用時，仍須遵守適用的 AGPL 義務，或另行取得適當的商業授權。
+
+爬取或連結的校方公告、試題、附件及其他第三方內容不因本專案開源而取得 MIT 授權，相關權利仍屬原權利人。
