@@ -1,5 +1,7 @@
 # 架構
 
+**繁體中文** | [English](ARCHITECTURE.en.md)
+
 ```mermaid
 flowchart TD
   Registry[學校清單與官方網域] --> Jobs[持久化 crawl jobs]

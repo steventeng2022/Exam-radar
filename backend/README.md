@@ -1,5 +1,7 @@
 # API / worker
 
+**繁體中文** | [English](README.en.md)
+
 Run from the repository root with Python 3.11+:
 
 ```bash

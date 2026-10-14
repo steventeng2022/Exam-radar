@@ -1,5 +1,7 @@
 # 參與貢獻 / Contributing
 
+**繁體中文** | [English](CONTRIBUTING.en.md)
+
 歡迎透過 [Issues](https://github.com/steventeng2022/Exam-radar/issues) 回報問題、提出建議，或提交 Pull Request。討論可使用繁體中文或英文，請尊重其他參與者。
 
 ## 開發與驗證

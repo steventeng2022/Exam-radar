@@ -1,5 +1,7 @@
 # Exam Radar — MVP v1
 
+**繁體中文** | [English](PRODUCT.en.md)
+
 Exam Radar 是全台校園考試資訊搜尋引擎。以 STA 的前後端分工為架構參考，獨立實作，不複製其程式碼與資料。
 
 ## 第一階段

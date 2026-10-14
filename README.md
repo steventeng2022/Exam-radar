@@ -1,5 +1,7 @@
 # Exam Radar 📡
 
+**繁體中文** | [English](README.en.md)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 全台校園考試資訊搜尋引擎：搜尋各校公開段考範圍、比較進度、追溯原始公告與修正版。
